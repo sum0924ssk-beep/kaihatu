@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}期限間近のレシピ{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2 class="form-title">期限が近い調味料活用レシピ</h2>
+
+    {% if recipes %}
+        <p>以下の調味料を活用できるレシピを提案します: <strong>{{ query }}</strong></p>
+        
+        <div class="list-grid">
+            {% for recipe in recipes %}
+            <div class="item-card">
+                <div class="item-info">
+                    <p>{{ recipe.title }}</p>
+                    <a href="{{ recipe.url }}" target="_blank">レシピを見る</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>{{ query }}</p>
+        <p>（別の調味料を登録するか、期限を設定してください）</p>
+    {% endif %}
+
+    <p style="margin-top: 20px;">
+        <a href="/" class="footer-link">← 登録画面に戻る</a>
+    </p>
+</div>
+{% endblock %}
