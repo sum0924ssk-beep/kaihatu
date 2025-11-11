@@ -25,6 +25,17 @@
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
     text-align: center;
+    border: 3px solid transparent; 
+}
+
+/* 期限切れが近いアイテムのスタイル */
+.item-card.near-expiry-style {
+    border-color: #f39c12; 
+}
+/* 期限切れアイテムのスタイル */
+.item-card.expired-style {
+    border-color: #e74c3c; 
+    opacity: 0.7;
 }
 
 .item-card:hover {
@@ -84,6 +95,12 @@
     margin-bottom: 20px;
 }
 
+.modal-body h3 {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+}
+
 .close-btn {
     color: #aaa;
     float: right;
@@ -108,6 +125,7 @@
     border: none;
     border-radius: 6px;
     cursor: pointer;
+    font-size: 1rem;
 }
 </style>
 
@@ -116,41 +134,45 @@
 
 <div class="list-grid">
 {% for item in condiments %}
-<div class="item-card"
-     data-id="{{ item.id }}"
-     data-name="{{ item.name }}"
-     data-image="{{ item.image_path }}"
-     data-expiry="{{ item.expiry }}"
-     onclick="openModal(this)">
-    {% if item.image_path %}
-        <img src="{{ item.image_path }}" alt="{{ item.name }}">
-    {% else %}
-        <img src="/static/noimage.png" alt="no image">
-    {% endif %}
-    <div class="item-info">
-        <p>{{ item.name }}</p>
-        {% if item.expiry %}
-        <p class="item-date">期限: {{ item.expiry }}</p>
-        {% endif %}
-    </div>
+<div class="item-card
+     {% if item.is_expired %} expired-style {% elif item.near_expiry %} near-expiry-style {% endif %}"
+     data-id="{{ item.id }}"
+     data-name="{{ item.name }}"
+     data-image="{% if item.image_path %}{{ item.image_path }}{% else %}{{ url_for('static', path='noimage.png') }}{% endif %}"
+     data-expiry="{{ item.expiry }}"
+     onclick="openModal(this)">
+    
+        {% if item.image_path %}
+        <img src="{{ item.image_path }}" alt="{{ item.name }}">
+    {% else %}
+        <img src="{{ url_for('static', path='noimage.png') }}" alt="no image">
+    {% endif %}
+    
+    <div class="item-info">
+        <p>{{ item.name }}</p>
+        {% if item.expiry %}
+            <p class="item-date">期限: {{ item.expiry }}</p>
+        {% else %}
+             <p class="item-date">期限: 未設定</p>
+        {% endif %}
+    </div>
 </div>
 {% endfor %}
 </div>
 </section>
 
-<!-- モーダル -->
 <div id="itemModal" class="modal">
-  <div class="modal-content">
-    <span class="close-btn" onclick="closeModal()">&times;</span>
-    <div class="modal-body">
-      <img id="modalImage" src="" alt="">
-      <h3 id="modalName"></h3>
-      <p><strong>賞味期限:</strong> <span id="modalExpiry"></span></p>
-      <form id="deleteForm" method="post" class="delete-form">
-        <button type="submit" onclick="return confirm('本当に削除しますか？')">🗑️ 削除</button>
-      </form>
-    </div>
-  </div>
+  <div class="modal-content">
+    <span class="close-btn" onclick="closeModal()">&times;</span>
+    <div class="modal-body">
+      <img id="modalImage" src="" alt="調味料画像">
+      <h3 id="modalName"></h3>
+      <p><strong>賞味期限:</strong> <span id="modalExpiry"></span></p>
+      <form id="deleteForm" method="post" class="delete-form">
+        <button type="submit" onclick="return confirm('本当に削除しますか？')">🗑️ 削除</button>
+      </form>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -161,24 +183,42 @@ const modalExpiry = document.getElementById("modalExpiry");
 const deleteForm = document.getElementById("deleteForm");
 
 function openModal(card) {
-  const id = card.dataset.id;
-  const name = card.dataset.name;
-  const image = card.dataset.image;
-  const expiry = card.dataset.expiry;
+  const id = card.dataset.id;
+  const name = card.dataset.name;
+  const expiry = card.dataset.expiry;
 
-  modalName.textContent = name;
-  modalImage.src = image;
-  modalExpiry.textContent = expiry || "未設定";
-  deleteForm.action = `/delete/${id}`;
-  modal.style.display = "block";
+  let image = card.dataset.image;
+
+  // 🔴 FIX: imageが "None" または空の場合、代替画像のパスを設定する (404エラー対策)
+  if (image === "None" || !image || image === "null") {
+      image = "{{ url_for('static', path='noimage.png') }}"; 
+  }
+
+  modalName.textContent = name;
+  modalImage.src = image; // 修正されたimage変数を使用
+
+  // 期限切れチェックと表示のロジック
+  if (expiry) {
+      const today = new Date().toISOString().split('T')[0];
+      if (expiry < today) {
+          modalExpiry.innerHTML = `<span style="color: #e74c3c; font-weight: bold;">${expiry} (期限切れ!)</span>`;
+      } else {
+          modalExpiry.textContent = expiry;
+      }
+  } else {
+      modalExpiry.textContent = "未設定";
+  }
+
+  deleteForm.action = `/delete/${id}`;
+  modal.style.display = "block";
 }
 
 function closeModal() {
-  modal.style.display = "none";
+  modal.style.display = "none";
 }
 
 window.onclick = (e) => {
-  if (e.target === modal) closeModal();
+  if (e.target === modal) closeModal();
 };
 </script>
 {% endblock %}
