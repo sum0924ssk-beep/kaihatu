@@ -2,7 +2,7 @@ import sqlite3
 import shutil
 import os
 from datetime import date, timedelta
-import httpx # API呼び出し用
+import httpx 
 from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +10,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pathlib import Path
 
 # --- 設定 ---
-# 💡 デプロイ環境で書き込み可能な/tmp以下のパスを指定
+# ⚠️ 注意: Render環境では/tmp以下のデータは再起動やアイドル後に消去されます。
+# 永続化が必要な場合は、Render DiskまたはAWS S3などの外部ストレージを使用してください。
 TMP_DIR = Path(os.environ.get("TEMP_DIR", "/tmp/condiments_app")) 
 DB_NAME = TMP_DIR / "condiments.db"
 UPLOAD_DIR = TMP_DIR / "uploads"
@@ -19,9 +20,10 @@ EXPIRY_THRESHOLD_DAYS = 7
 
 # --- データベース初期化 ---
 def init_db():
+    # フォルダが存在しない場合は作成 (DBファイルとアップロード用)
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     
-    # 🚨 修正1: DB_NAMEをstr()で文字列に変換して渡す
+    # DB_NAMEをstr()で文字列に変換して接続
     conn = sqlite3.connect(str(DB_NAME)) 
     cur = conn.cursor()
     cur.execute("""
@@ -41,29 +43,25 @@ init_db()
 
 # FastAPIとテンプレート設定
 app = FastAPI()
+
+# テンプレート設定: 'templates' フォルダがプロジェクトルートにあると仮定
 templates = Jinja2Templates(directory="templates")
 
-# 静的ファイルの提供 (CSS, JS, 画像など)
-# 変更前（以前のパス）:
-# app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-# 変更後（ルート直下の static を参照）:
+# 静的ファイルの提供 (CSS, JSなど): 'static' フォルダがプロジェクトルートにあると仮定
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# StaticFiles.__init__() から 'name' 引数を削除
-# フォルダが init_db() で作成されているため、ここでマウント可能
+# アップロードファイルの提供: /tmp下のUPLOAD_DIRを公開
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
-# --- レシピAPI設定 (キーワード検索APIに切り替え) ---
+# --- レシピAPI設定 ---
 RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1013897941253771301") 
 RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeSearch/20170426" 
 
 # --- API呼び出し関数 ---
 async def fetch_recipes_from_api(ingredients_query: str):
-    """
-    期限が近い調味料名 (ingredients_query) を使ってレシピAPIを呼び出す
-    """
+    """期限が近い調味料名 (ingredients_query) を使ってレシピAPIを呼び出す"""
+    # ... (変更なし。元のコードのまま) ...
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
@@ -104,7 +102,6 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # POST: 調味料の登録処理
-# 🚨 修正: エンドポイントを /register から /upload に変更
 @app.post("/upload") 
 async def register_condiment(
     name: str = Form(...),
@@ -113,24 +110,25 @@ async def register_condiment(
 ):
     image_path = None
     if image and image.filename:
+        # ファイル名の生成
         ext = Path(image.filename).suffix
         unique_filename = f"{Path(name).stem}_{date.today().strftime('%Y%m%d')}_{os.urandom(8).hex()}{ext}"
         file_path = UPLOAD_DIR / unique_filename
         
         try:
+            # ファイルの保存
             with file_path.open("wb") as buffer:
-                # 登録処理でファイルポインタをリセットする処理を追加
                 image.file.seek(0)
                 shutil.copyfileobj(image.file, buffer)
                 
-            # DBに保存するパスは、StaticFilesのパス形式（/uploads/ファイル名）にする
+            # DBに保存するパスは、ウェブからアクセス可能な StaticFiles のパス形式にする
             image_path = f"/uploads/{unique_filename}" 
         except Exception as e:
             print(f"ファイル保存エラー: {e}")
-            raise HTTPException(status_code=500, detail="ファイルのアップロードに失敗しました。")
+            # サーバーログでエラーを確認できるようにする
+            raise HTTPException(status_code=500, detail=f"ファイルのアップロードに失敗しました: {e}")
 
-    # DBに保存
-    # 🚨 修正2: DB_NAMEをstr()で文字列に変換して渡す
+    # DBに保存 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
     cur.execute(
@@ -146,7 +144,7 @@ async def register_condiment(
 # GET: 調味料一覧表示
 @app.get("/list", response_class=HTMLResponse)
 async def list_condiments(request: Request):
-    # 🚨 修正3: DB_NAMEをstr()で文字列に変換して渡す
+    # DB接続 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
@@ -182,13 +180,20 @@ async def list_condiments(request: Request):
 # POST: 調味料の削除
 @app.post("/delete/{item_id}")
 async def delete_condiment(item_id: int):
-    # 🚨 修正4: DB_NAMEをstr()で文字列に変換して渡す
+    # DB接続 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
     
     # 削除対象の画像パスを取得
     cur.execute("SELECT image_path FROM condiments WHERE id = ?", (item_id,))
     row = cur.fetchone()
+    
+    # DBから削除
+    cur.execute("DELETE FROM condiments WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    
+    # 物理ファイルを削除 (DB削除後に実行)
     if row and row[0]:
         # image_path は /uploads/ファイル名 形式なので、ファイル名だけを取得
         image_filename = Path(row[0]).name
@@ -197,11 +202,6 @@ async def delete_condiment(item_id: int):
         if file_to_delete.exists():
             os.remove(file_to_delete)
             
-    # DBから削除
-    cur.execute("DELETE FROM condiments WHERE id = ?", (item_id,))
-    conn.commit()
-    conn.close()
-    
     return RedirectResponse(url="/list", status_code=303)
 
 
@@ -210,7 +210,7 @@ async def delete_condiment(item_id: int):
 # -----------------------------------------------------------
 @app.get("/recipes", response_class=HTMLResponse)
 async def get_near_expiry_recipes(request: Request):
-    # 🚨 修正5: DB_NAMEをstr()で文字列に変換して渡す
+    # DB接続 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
     
@@ -236,7 +236,7 @@ async def get_near_expiry_recipes(request: Request):
             "query": f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。",
         })
 
-    # 調味料名をクエリとして結合 (例: "しょうゆ みりん")
+    # 調味料名をクエリとして結合
     query = " ".join(near_expiry_items) 
     
     # APIを呼び出す
