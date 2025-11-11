@@ -44,6 +44,10 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 # 静的ファイルの提供 (CSS, JS, 画像など)
+# 変更前（以前のパス）:
+# app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# 変更後（ルート直下の static を参照）:
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # StaticFiles.__init__() から 'name' 引数を削除
