@@ -1,28 +1,35 @@
 import sqlite3
 import shutil
 import os
-from datetime import date, timedelta, datetime # datetimeをインポート
+from datetime import date, timedelta
 import httpx 
 from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pathlib import Path
-import random 
+from datetime import datetime
+import random # 一意なファイル名生成のために追加
 
 # --- 設定 ---
+# ⚠️ 注意: Render環境では/tmp以下のデータは再起動やアイドル後に消去されます。
+# 永続化が必要な場合は、Render DiskまたはAWS S3などの外部ストレージを使用してください。
 TMP_DIR = Path(os.environ.get("TEMP_DIR", "/tmp/condiments_app")) 
 DB_NAME = TMP_DIR / "condiments.db"
 UPLOAD_DIR = TMP_DIR / "uploads"
+# 期限切れが近いと見なす日数
 EXPIRY_THRESHOLD_DAYS = 7 
 
 # --- データベース初期化 ---
 def init_db():
+    # フォルダが存在しない場合は作成 (DBファイルとアップロード用)
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+    
+    # DB_NAMEをstr()で文字列に変換して接続
     conn = sqlite3.connect(str(DB_NAME)) 
     cur = conn.cursor()
     
-    # 既存のDBスキーマに合わせて created_at カラムを追加
+    # 既存のDBスキーマ (condiments.db) に合わせて created_at カラムを追加
     cur.execute("""
         CREATE TABLE IF NOT EXISTS condiments (
             id INTEGER PRIMARY KEY,
@@ -35,21 +42,31 @@ def init_db():
     conn.commit()
     conn.close()
 
+# アプリケーションの初期化とマウントの前にDB初期化（フォルダ作成）を実行
 init_db() 
+
 
 # FastAPIとテンプレート設定
 app = FastAPI()
+
+# テンプレート設定: 'templates' フォルダがプロジェクトルートにあると仮定
 templates = Jinja2Templates(directory="templates")
+
+# 静的ファイルの提供 (CSS, JS, noimage.pngなど): 'static' フォルダを公開
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# アップロードファイルの提供: /tmp下のUPLOAD_DIRを公開
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # --- レシピAPI設定 ---
+# RAKUTEN_APP_ID の値は環境変数から取得できない場合、デフォルト値が使われます
 RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1013897941253771301") 
 RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeSearch/20170426" 
 
 # --- API呼び出し関数 ---
 async def fetch_recipes_from_api(ingredients_query: str):
+    """期限が近い調味料名 (ingredients_query) を使ってレシピAPIを呼び出す"""
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
@@ -73,6 +90,10 @@ async def fetch_recipes_from_api(ingredients_query: str):
                         "url": recipe.get('recipeUrl', '#')
                     })
             return recipes
+            
+        except httpx.HTTPStatusError as e:
+            print(f"HTTPエラーが発生しました: {e}")
+            return []
         except Exception as e:
             print(f"レシピAPI呼び出し中にエラーが発生しました: {e}")
             return []
@@ -93,25 +114,34 @@ async def register_condiment(
     image: UploadFile = File(None)
 ):
     image_path = None
+    
+    # 現在時刻を取得
     current_time = datetime.now().isoformat()
     
     if image and image.filename:
+        # ファイル名の生成
         ext = Path(image.filename).suffix
+        # ファイル名にランダムな4桁の数字を追加し、重複を避ける
         unique_filename = f"{Path(name).stem}_{date.today().strftime('%Y%m%d')}_{random.randint(1000, 9999)}{ext}"
         file_path = UPLOAD_DIR / unique_filename
         
         try:
+            # ファイルの保存
             with file_path.open("wb") as buffer:
                 image.file.seek(0)
                 shutil.copyfileobj(image.file, buffer)
+                
+            # DBに保存するパスは、ウェブからアクセス可能な StaticFiles のパス形式にする
             image_path = f"/uploads/{unique_filename}" 
         except Exception as e:
             print(f"ファイル保存エラー: {e}")
+            # サーバーログでエラーを確認できるようにする
             raise HTTPException(status_code=500, detail=f"ファイルのアップロードに失敗しました: {e}")
 
-    # DBに保存: created_at も挿入
+    # DBに保存 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
+    # created_at も同時に挿入
     cur.execute(
         "INSERT INTO condiments (name, expiry, image_path, created_at) VALUES (?, ?, ?, ?)",
         (name, expiry if expiry else None, image_path, current_time)
@@ -125,10 +155,12 @@ async def register_condiment(
 # GET: 調味料一覧表示
 @app.get("/list", response_class=HTMLResponse)
 async def list_condiments(request: Request):
+    # DB接続 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     
+    # 全ての調味料を期限が近い順に取得
     cur.execute("""
         SELECT id, name, expiry, image_path 
         FROM condiments 
@@ -137,6 +169,7 @@ async def list_condiments(request: Request):
     condiments = [dict(row) for row in cur.fetchall()]
     conn.close()
     
+    # 期限切れチェック
     today = date.today()
     for item in condiments:
         item['is_expired'] = False
@@ -158,17 +191,22 @@ async def list_condiments(request: Request):
 # POST: 調味料の削除
 @app.post("/delete/{item_id}")
 async def delete_condiment(item_id: int):
+    # DB接続 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
     
+    # 削除対象の画像パスを取得
     cur.execute("SELECT image_path FROM condiments WHERE id = ?", (item_id,))
     row = cur.fetchone()
     
+    # DBから削除
     cur.execute("DELETE FROM condiments WHERE id = ?", (item_id,))
     conn.commit()
     conn.close()
     
+    # 物理ファイルを削除 (DB削除後に実行)
     if row and row[0]:
+        # image_path は /uploads/ファイル名 形式なので、ファイル名だけを取得
         image_filename = Path(row[0]).name
         file_to_delete = UPLOAD_DIR / image_filename
         
@@ -178,12 +216,16 @@ async def delete_condiment(item_id: int):
     return RedirectResponse(url="/list", status_code=303)
 
 
+# -----------------------------------------------------------
 # GET: 期限間近の調味料を使ったレシピ検索ページ
+# -----------------------------------------------------------
 @app.get("/recipes", response_class=HTMLResponse)
 async def get_near_expiry_recipes(request: Request):
+    # DB接続 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
     
+    # 期限が今日から設定日数以内のアイテムを抽出
     expiry_limit = (date.today() + timedelta(days=EXPIRY_THRESHOLD_DAYS)).strftime("%Y-%m-%d")
     
     cur.execute("""
@@ -193,9 +235,11 @@ async def get_near_expiry_recipes(request: Request):
         ORDER BY expiry ASC
     """, (expiry_limit,))
     
+    # 取得した調味料名をリスト化
     near_expiry_items = [row[0] for row in cur.fetchall()]
     conn.close()
 
+    # 期限が近い調味料がない場合の処理
     if not near_expiry_items:
         return templates.TemplateResponse("recipe_search.html", {
             "request": request,
@@ -203,7 +247,10 @@ async def get_near_expiry_recipes(request: Request):
             "query": f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。",
         })
 
+    # 調味料名をクエリとして結合
     query = " ".join(near_expiry_items) 
+    
+    # APIを呼び出す
     recipes = await fetch_recipes_from_api(query) 
 
     return templates.TemplateResponse("recipe_search.html", {
