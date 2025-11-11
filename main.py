@@ -8,6 +8,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pathlib import Path
+from datetime import datetime
+import random # 一意なファイル名生成のために追加
 
 # --- 設定 ---
 # ⚠️ 注意: Render環境では/tmp以下のデータは再起動やアイドル後に消去されます。
@@ -26,12 +28,15 @@ def init_db():
     # DB_NAMEをstr()で文字列に変換して接続
     conn = sqlite3.connect(str(DB_NAME)) 
     cur = conn.cursor()
+    
+    # 既存のDBスキーマ (condiments.db) に合わせて created_at カラムを追加
     cur.execute("""
         CREATE TABLE IF NOT EXISTS condiments (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             expiry TEXT,
-            image_path TEXT
+            image_path TEXT,
+            created_at TEXT  
         )
     """)
     conn.commit()
@@ -47,7 +52,7 @@ app = FastAPI()
 # テンプレート設定: 'templates' フォルダがプロジェクトルートにあると仮定
 templates = Jinja2Templates(directory="templates")
 
-# 静的ファイルの提供 (CSS, JSなど): 'static' フォルダがプロジェクトルートにあると仮定
+# 静的ファイルの提供 (CSS, JS, noimage.pngなど): 'static' フォルダを公開
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # アップロードファイルの提供: /tmp下のUPLOAD_DIRを公開
@@ -55,13 +60,13 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # --- レシピAPI設定 ---
+# RAKUTEN_APP_ID の値は環境変数から取得できない場合、デフォルト値が使われます
 RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1013897941253771301") 
 RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeSearch/20170426" 
 
 # --- API呼び出し関数 ---
 async def fetch_recipes_from_api(ingredients_query: str):
     """期限が近い調味料名 (ingredients_query) を使ってレシピAPIを呼び出す"""
-    # ... (変更なし。元のコードのまま) ...
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
@@ -109,10 +114,15 @@ async def register_condiment(
     image: UploadFile = File(None)
 ):
     image_path = None
+    
+    # 現在時刻を取得
+    current_time = datetime.now().isoformat()
+    
     if image and image.filename:
         # ファイル名の生成
         ext = Path(image.filename).suffix
-        unique_filename = f"{Path(name).stem}_{date.today().strftime('%Y%m%d')}_{os.urandom(8).hex()}{ext}"
+        # ファイル名にランダムな4桁の数字を追加し、重複を避ける
+        unique_filename = f"{Path(name).stem}_{date.today().strftime('%Y%m%d')}_{random.randint(1000, 9999)}{ext}"
         file_path = UPLOAD_DIR / unique_filename
         
         try:
@@ -131,9 +141,10 @@ async def register_condiment(
     # DBに保存 (DB_NAMEをstr()で変換)
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
+    # created_at も同時に挿入
     cur.execute(
-        "INSERT INTO condiments (name, expiry, image_path) VALUES (?, ?, ?)",
-        (name, expiry if expiry else None, image_path)
+        "INSERT INTO condiments (name, expiry, image_path, created_at) VALUES (?, ?, ?, ?)",
+        (name, expiry if expiry else None, image_path, current_time)
     )
     conn.commit()
     conn.close()
