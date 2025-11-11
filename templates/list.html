@@ -117,42 +117,40 @@
 <div class="list-grid">
 {% for item in condiments %}
 <div class="item-card"
-data-id="{{ item.id }}"
-data-name="{{ item.name }}"
-data-expiry="{{ item.expiry }}"
-{# 💡 修正 1: item.image_pathが空またはNoneの場合、代替画像のパスを設定 #}
-data-image="{% if item.image_path %}{{ item.image_path }}{% else %}{{ url_for('static', path='noimage.png') }}{% endif %}"
-onclick="openModal(this)">
- 
- {% if item.image_path %}
- <img src="{{ item.image_path }}" alt="{{ item.name }}">
- {% else %}
- <img src="{{ url_for('static', path='noimage.png') }}" alt="no image">
- {% endif %}
- 
- <div class="item-info">
- <p>{{ item.name }}</p>
- {% if item.expiry %}
- <p class="item-date">期限: {{ item.expiry }}</p>
- {% endif %}
- </div>
+     data-id="{{ item.id }}"
+     data-name="{{ item.name }}"
+     data-image="{{ item.image_path }}"
+     data-expiry="{{ item.expiry }}"
+     onclick="openModal(this)">
+    {% if item.image_path %}
+        <img src="{{ item.image_path }}" alt="{{ item.name }}">
+    {% else %}
+        <img src="/static/noimage.png" alt="no image">
+    {% endif %}
+    <div class="item-info">
+        <p>{{ item.name }}</p>
+        {% if item.expiry %}
+        <p class="item-date">期限: {{ item.expiry }}</p>
+        {% endif %}
+    </div>
 </div>
 {% endfor %}
 </div>
 </section>
 
+<!-- モーダル -->
 <div id="itemModal" class="modal">
- <div class="modal-content">
- <span class="close-btn" onclick="closeModal()">&times;</span>
- <div class="modal-body">
- <img id="modalImage" src="" alt="調味料画像">
- <h3 id="modalName"></h3>
- <p><strong>賞味期限:</strong> <span id="modalExpiry"></span></p>
- <form id="deleteForm" method="post" class="delete-form">
- <button type="submit" onclick="return confirm('本当に削除しますか？')">🗑️ 削除</button>
- </form>
- </div>
- </div>
+  <div class="modal-content">
+    <span class="close-btn" onclick="closeModal()">&times;</span>
+    <div class="modal-body">
+      <img id="modalImage" src="" alt="">
+      <h3 id="modalName"></h3>
+      <p><strong>賞味期限:</strong> <span id="modalExpiry"></span></p>
+      <form id="deleteForm" method="post" class="delete-form">
+        <button type="submit" onclick="return confirm('本当に削除しますか？')">🗑️ 削除</button>
+      </form>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -163,30 +161,24 @@ const modalExpiry = document.getElementById("modalExpiry");
 const deleteForm = document.getElementById("deleteForm");
 
 function openModal(card) {
- const id = card.dataset.id;
- const name = card.dataset.name;
- let image = card.dataset.image; // let で宣言
- const expiry = card.dataset.expiry;
+  const id = card.dataset.id;
+  const name = card.dataset.name;
+  const image = card.dataset.image;
+  const expiry = card.dataset.expiry;
 
- // 💡 修正 2: imageが "None" または空の場合、代替画像のパスに置き換える
- // {{ url_for(...) }} はJinja2によって '/static/noimage.png' のような文字列に置き換えられます
- if (image === "None" || !image || image === "null") {
-      image = "{{ url_for('static', path='noimage.png') }}";
-  }
-
- modalName.textContent = name;
- modalImage.src = image; // 修正されたimage変数を使用
- modalExpiry.textContent = expiry || "未設定";
- deleteForm.action = `/delete/${id}`;
- modal.style.display = "block";
+  modalName.textContent = name;
+  modalImage.src = image;
+  modalExpiry.textContent = expiry || "未設定";
+  deleteForm.action = `/delete/${id}`;
+  modal.style.display = "block";
 }
 
 function closeModal() {
- modal.style.display = "none";
+  modal.style.display = "none";
 }
 
 window.onclick = (e) => {
- if (e.target === modal) closeModal();
+  if (e.target === modal) closeModal();
 };
 </script>
 {% endblock %}
