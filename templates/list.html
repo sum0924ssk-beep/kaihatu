@@ -119,7 +119,7 @@
 <div class="item-card"
      data-id="{{ item.id }}"
      data-name="{{ item.name }}"
-     data-image="{{ item.image_path }}"
+     data-image="{% if item.image_path %}{{ item.image_path }}{% else %}/static/noimage.png{% endif %}"
      data-expiry="{{ item.expiry }}"
      onclick="openModal(this)">
     {% if item.image_path %}
@@ -138,7 +138,6 @@
 </div>
 </section>
 
-<!-- モーダル -->
 <div id="itemModal" class="modal">
   <div class="modal-content">
     <span class="close-btn" onclick="closeModal()">&times;</span>
@@ -163,12 +162,11 @@ const deleteForm = document.getElementById("deleteForm");
 function openModal(card) {
   const id = card.dataset.id;
   const name = card.dataset.name;
-  const image = card.dataset.image;
-  const expiry = card.dataset.expiry;
+  const image = card.dataset.image; // data-imageには常に有効なURLが設定されている
 
   modalName.textContent = name;
-  modalImage.src = image;
-  modalExpiry.textContent = expiry || "未設定";
+  modalImage.src = image; // ここで画像URLが設定される
+  modalExpiry.textContent = card.dataset.expiry || "未設定";
   deleteForm.action = `/delete/${id}`;
   modal.style.display = "block";
 }
