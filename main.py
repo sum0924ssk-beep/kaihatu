@@ -65,7 +65,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1068807561207277425")
 
 # 修正: キーワード検索に適したCategorySearch APIのURLに戻す
-RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/CategorySearch/20170426" 
+RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/CategoryRanking/20170426"
 
 
 # --- API呼び出し関数 ---
