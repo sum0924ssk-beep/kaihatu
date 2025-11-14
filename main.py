@@ -61,11 +61,11 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # --- レシピAPI設定 ---
 # RAKUTEN_APP_ID の値は環境変数から取得できない場合、デフォルト値が使われます
-# 1068807561207277425 はサンプルIDの可能性があるため、本番では環境変数の設定を推奨
+# ⚠️ 注意: このデフォルトIDはサンプルである可能性が高く、必ずご自身の有効なIDに置き換えるか、環境変数に設定してください。
 RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1068807561207277425")
 
-# 修正: キーワード検索に適したCategorySearch APIのURLに戻す
-RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeCategoryList/20170426"
+# 🚨 修正: 最も基本的なAPIである RecipeSearch に戻す
+RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeSearch/20170426"
 
 
 # --- API呼び出し関数 ---
@@ -80,7 +80,8 @@ async def fetch_recipes_from_api(ingredients_query: str):
                 RAKUTEN_RECIPE_URL,
                 params={
                     "applicationId": RAKUTEN_APP_ID,
-                    "keyword": search_query, # 修正後のAPIではこのパラメータが機能する
+                    # RecipeSearch APIは 'keyword' をサポートしていない可能性もあるが、テストのためこのまま
+                    "keyword": search_query, 
                     "format": "json"
                 },
                 timeout=10.0
@@ -88,19 +89,18 @@ async def fetch_recipes_from_api(ingredients_query: str):
             response.raise_for_status() 
             data = response.json()
             
-            recipes = []
+            # 🚨 デバッグ: APIが返した生データをログに出力する
+            print(f"DEBUG: Rakuten API Response Data: {data}")
             
-            # 修正: CategoryRanking APIは結果を 'result' の中に持つことが多いため、
-            # 'result' キーの有無に関わらず、再帰的にデータを探す
+            recipes = []
             
             # APIの結果リストは 'recipes' キーの下にあると仮定
             recipe_list = []
 
+            # RecipeSearch APIのレスポンス構造の確認
             if 'result' in data and 'recipes' in data['result']:
-                # CategorySearch, RecipeSearch の旧仕様
                 recipe_list = data['result']['recipes']
             elif 'recipes' in data:
-                # CategoryRanking の可能性
                 recipe_list = data['recipes']
             elif 'result' in data and 'categoryRanking' in data['result']:
                  # CategoryRanking APIの典型的なレスポンス構造
