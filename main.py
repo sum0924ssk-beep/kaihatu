@@ -90,24 +90,38 @@ async def fetch_recipes_from_api(ingredients_query: str):
             
             recipes = []
             
-            # CategorySearch API のレスポンス構造に合わせてデータを取り出す
-            # レスポンスが {'result': {'recipes': [...]}} または {'recipes': [...]} の可能性がある
+            # 修正: CategoryRanking APIは結果を 'result' の中に持つことが多いため、
+            # 'result' キーの有無に関わらず、再帰的にデータを探す
+            
+            # APIの結果リストは 'recipes' キーの下にあると仮定
             recipe_list = []
+
             if 'result' in data and 'recipes' in data['result']:
+                # CategorySearch, RecipeSearch の旧仕様
                 recipe_list = data['result']['recipes']
             elif 'recipes' in data:
-                 # CategorySearch APIのレスポンスはトップレベルに'recipes'を持つことが多い
+                # CategoryRanking の可能性
                 recipe_list = data['recipes']
-            
-            
+            elif 'result' in data and 'categoryRanking' in data['result']:
+                 # CategoryRanking APIの典型的なレスポンス構造
+                recipe_list = data['result']['categoryRanking']
+
+
             for item in recipe_list:
                 # itemは通常、{'recipe': {...}} という構造
-                recipe = item.get('recipe', {})
-                recipes.append({
-                    "title": recipe.get('recipeTitle', 'タイトルなし'),
-                    "url": recipe.get('recipeUrl', '#'),
-                    "image": recipe.get('mediumImageUrl', '') # 画像も取得可能
-                })
+                recipe = item.get('recipe', {}) # レシピ情報があれば取得
+                
+                # 'categoryRanking' の場合は、item自体がレシピ情報である可能性もある
+                if not recipe and 'recipeTitle' in item:
+                    recipe = item 
+
+                # 有効なレシピ情報が見つかった場合のみ追加
+                if recipe:
+                    recipes.append({
+                        "title": recipe.get('recipeTitle', 'タイトルなし'),
+                        "url": recipe.get('recipeUrl', '#'),
+                        "image": recipe.get('mediumImageUrl', '')
+                    })
             return recipes
             
         except httpx.HTTPStatusError as e:
