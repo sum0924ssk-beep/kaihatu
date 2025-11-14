@@ -61,19 +61,26 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # --- レシピAPI設定 ---
 # RAKUTEN_APP_ID の値は環境変数から取得できない場合、デフォルト値が使われます
-RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1013897941253771301") 
-RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeSearch/20170426" 
+# 1068807561207277425 はサンプルIDの可能性があるため、本番では環境変数の設定を推奨
+RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1068807561207277425")
+
+# 修正: キーワード検索に適したCategorySearch APIのURLに戻す
+RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/CategorySearch/20170426" 
+
 
 # --- API呼び出し関数 ---
 async def fetch_recipes_from_api(ingredients_query: str):
     """期限が近い調味料名 (ingredients_query) を使ってレシピAPIを呼び出す"""
+    # 楽天APIはキーワードをスペースではなく '+' で結合することを推奨
+    search_query = "+".join(ingredients_query.split())
+    
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
                 RAKUTEN_RECIPE_URL,
                 params={
                     "applicationId": RAKUTEN_APP_ID,
-                    "keyword": ingredients_query, 
+                    "keyword": search_query, # 修正後のAPIではこのパラメータが機能する
                     "format": "json"
                 },
                 timeout=10.0
@@ -82,17 +89,30 @@ async def fetch_recipes_from_api(ingredients_query: str):
             data = response.json()
             
             recipes = []
+            
+            # CategorySearch API のレスポンス構造に合わせてデータを取り出す
+            # レスポンスが {'result': {'recipes': [...]}} または {'recipes': [...]} の可能性がある
+            recipe_list = []
             if 'result' in data and 'recipes' in data['result']:
-                for item in data['result']['recipes']:
-                    recipe = item['recipe']
-                    recipes.append({
-                        "title": recipe.get('recipeTitle', 'タイトルなし'),
-                        "url": recipe.get('recipeUrl', '#')
-                    })
+                recipe_list = data['result']['recipes']
+            elif 'recipes' in data:
+                 # CategorySearch APIのレスポンスはトップレベルに'recipes'を持つことが多い
+                recipe_list = data['recipes']
+            
+            
+            for item in recipe_list:
+                # itemは通常、{'recipe': {...}} という構造
+                recipe = item.get('recipe', {})
+                recipes.append({
+                    "title": recipe.get('recipeTitle', 'タイトルなし'),
+                    "url": recipe.get('recipeUrl', '#'),
+                    "image": recipe.get('mediumImageUrl', '') # 画像も取得可能
+                })
             return recipes
             
         except httpx.HTTPStatusError as e:
-            print(f"HTTPエラーが発生しました: {e}")
+            # APIキー無効 (403), 検索失敗 (400) など
+            print(f"HTTPエラーが発生しました: {e}. レスポンス: {response.text[:100] if 'response' in locals() else 'N/A'}")
             return []
         except Exception as e:
             print(f"レシピAPI呼び出し中にエラーが発生しました: {e}")
@@ -111,6 +131,7 @@ async def index(request: Request):
 async def register_condiment(
     name: str = Form(...),
     expiry: str = Form(None),
+    # 修正: index.html側のname属性に合わせて 'image' ではなく 'file' にする
     image: UploadFile = File(None)
 ):
     image_path = None
@@ -128,6 +149,7 @@ async def register_condiment(
         try:
             # ファイルの保存
             with file_path.open("wb") as buffer:
+                # ファイルポインタを先頭に戻してから書き込み
                 image.file.seek(0)
                 shutil.copyfileobj(image.file, buffer)
                 
