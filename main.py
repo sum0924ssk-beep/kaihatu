@@ -21,7 +21,7 @@ EXPIRY_THRESHOLD_DAYS = 7
 
 # --- レシピAPI設定 ---
 # ⚠️ 注意: 必ずご自身の有効なIDに置き換えてください
-RAKUTEN_APP_ID = "YOUR_VALID_RAKUTEN_APP_ID_HERE" # ここをあなたのキーに置き換える！
+RAKUTEN_APP_ID = "167b0fb2777f560b547c3a9291641adda6192718" # ここをあなたのキーに置き換える！
 
 # --- データベース初期化 ---
 def init_db():
