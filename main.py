@@ -62,7 +62,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # --- レシピAPI設定 ---
 # RAKUTEN_APP_ID の値は環境変数から取得できない場合、デフォルト値が使われます
 # ⚠️ 注意: このデフォルトIDはサンプルである可能性が高く、必ずご自身の有効なIDに置き換えるか、環境変数に設定してください。
-RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "1068807561207277425")
+RAKUTEN_APP_ID = os.environ.get("RAKUTEN_APP_ID", "167b0fb2777f560b547c3a9291641adda6192718")
 
 # 🚨 修正: 最も基本的なAPIである RecipeSearch に戻す
 RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeSearch/20170426"
