@@ -48,7 +48,7 @@ app = FastAPI()
 init_db()
 
 # 静的ファイル設定 (CSS, JS, 画像)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 templates = Jinja2Templates(directory="templates")
