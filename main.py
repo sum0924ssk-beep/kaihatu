@@ -16,6 +16,7 @@ import random
 APP_DATA_DIR = Path("./app_data")
 DB_NAME = APP_DATA_DIR / "condiments.db"
 UPLOAD_DIR = APP_DATA_DIR / "uploads"
+STATIC_DIR = Path(__file__).parent / "static"
 # 期限切れが近いと見なす日数
 EXPIRY_THRESHOLD_DAYS = 7 
 
