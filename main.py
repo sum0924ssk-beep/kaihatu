@@ -20,13 +20,10 @@ UPLOAD_DIR = APP_DATA_DIR / "uploads"
 EXPIRY_THRESHOLD_DAYS = 7 
 
 # --- レシピAPI設定 ---
-# 🚨 ここにAPIキーとCSE IDを貼り付けてください！ 🚨
 # 1. Google Cloud Consoleで取得したAPIキー
 GOOGLE_API_KEY = "AIzaSyBw0E7pet5a9zonymLCXs2stcrGkiJbrZo"
 # 2. カスタム検索エンジンで取得したCSE ID
 GOOGLE_CSE_ID = "54d53a5e4d8e94217"
-# RAKUTEN_APP_IDはGoogle Searchへの切り替えに伴い不要になりました
-# RAKUTEN_APP_ID = "1058162671022524425" 
 
 # --- データベース初期化 ---
 def init_db():
@@ -76,10 +73,10 @@ async def fetch_recipes_from_api(ingredients_query: str):
             response = await client.get(
                 GOOGLE_SEARCH_URL,
                 params={
-                    "key": GOOGLE_API_KEY,      # 💡 APIキー
-                    "cx": GOOGLE_CSE_ID,       # 💡 CSE ID
-                    "q": search_query,          # 検索クエリ
-                    "num": 5                    # 取得する結果の数 (最大10)
+                    "key": GOOGLE_API_KEY,      
+                    "cx": GOOGLE_CSE_ID,       
+                    "q": search_query,         
+                    "num": 5                   
                 },
                 timeout=10.0
             )
@@ -97,7 +94,7 @@ async def fetch_recipes_from_api(ingredients_query: str):
                     "title": item.get('title', 'タイトルなし'),
                     "url": item.get('link', '#'),
                     # 画像は取得が複雑なため、ここでは省略
-                    "image": "" 
+                    "image": "recipe.png" 
                 })
             
             print(f"DEBUG: 抽出されたレシピ数: {len(recipes)}")
