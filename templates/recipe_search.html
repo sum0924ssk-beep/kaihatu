@@ -12,7 +12,7 @@
         <div class="list-grid">
             {% for recipe in recipes %}
             <div class="item-card recipe-card">
-                <img src="{{ recipe.image if recipe.image else url_for('static', path='images/no_recipe_image.png') }}" 
+                <img src="{{ recipe.image }}"
                      alt="{{ recipe.title }}" 
                      onerror="this.onerror=null;this.src='{{ url_for('static', path='images/no_recipe_image.png') }}';">
                      
