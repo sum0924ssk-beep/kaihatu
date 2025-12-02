@@ -244,13 +244,6 @@ form button[type="submit"]:hover {
     margin-bottom: 20px;
 }
 
-.modal-body h3 {
-    text-align: center;
-    color: #2c3e50;
-    margin-top: 0;
-    font-size: 1.5rem;
-}
-
 .modal-details p {
     margin: 10px 0;
     padding: 8px;
@@ -311,4 +304,91 @@ form button[type="submit"]:hover {
         width: 95%;
         margin: 10% auto;
     }
+}
+
+
+/* ====================================
+    6. レシピページ専用デザイン強化
+    ==================================== */
+
+/* 既存の .list-grid を上書き（モバイル対応強化） */
+.list-grid {
+    display: grid;
+    /* 250pxを最小幅として、画面幅に応じて列数を自動調整 */
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); 
+    gap: 20px;
+    padding: 0 1.5em; 
+    max-width: 1200px; 
+    margin: 0 auto; 
+}
+
+/* レシピカード全体 (recipe_search.htmlでitem-cardとrecipe-cardの両方が適用される) */
+.recipe-card {
+    display: flex; 
+    flex-direction: column;
+    height: 100%; /* グリッド内で高さを揃える */
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    text-align: left; /* レシピカードのテキストは左寄せ */
+    cursor: default; 
+}
+
+.recipe-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* 画像エリア（代替画像用）の調整 */
+.recipe-card img {
+    width: 100%;
+    height: 180px; /* 高さの強調 */
+    object-fit: cover;
+    background-color: #ecf0f1; /* 画像がない場合の背景色 */
+    /* アクセントカラーを下に付けて、領域を強調 */
+    border-bottom: 3px solid #f39c12; /* アクセントライン */
+}
+
+/* 情報エリアの調整 */
+.item-info {
+    padding: 15px;
+    flex-grow: 1; 
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; 
+}
+
+/* レシピタイトル */
+.item-info p {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0 0 10px 0; 
+    /* 2行で省略する設定 */
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2; 
+    white-space: normal; /* list.htmlの「一行で省略」を解除 */
+    text-overflow: clip; 
+}
+
+/* レシピを見るボタン */
+.item-info a {
+    display: block;
+    text-align: center;
+    padding: 10px;
+    background-color: #3498db;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    margin-top: 15px;
+    font-weight: 700;
+    transition: background-color 0.2s;
+}
+
+.item-info a:hover {
+    background-color: #2980b9;
 }
