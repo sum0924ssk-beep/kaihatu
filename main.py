@@ -12,7 +12,7 @@ from datetime import datetime
 import random 
 
 # --- 設定 ---
-# 💡 修正: ローカル実行用にデータ保存先をプロジェクトフォルダ内の 'app_data' に設定
+# 💡 ローカル実行用にデータ保存先をプロジェクトフォルダ内の 'app_data' に設定
 APP_DATA_DIR = Path("./app_data")
 DB_NAME = APP_DATA_DIR / "condiments.db"
 UPLOAD_DIR = APP_DATA_DIR / "uploads"
@@ -20,18 +20,19 @@ UPLOAD_DIR = APP_DATA_DIR / "uploads"
 EXPIRY_THRESHOLD_DAYS = 7 
 
 # --- レシピAPI設定 ---
-# ⚠️ 注意: 必ずご自身の有効なIDに置き換えてください
-RAKUTEN_APP_ID = "167b0fb2777f560b547c3a9291641adda6192718" # ここをあなたのキーに置き換える！
+# 🚨 ここにAPIキーとCSE IDを貼り付けてください！ 🚨
+# 1. Google Cloud Consoleで取得したAPIキー
+GOOGLE_API_KEY = "AIzaSyBw0E7pet5a9zonymLCXs2stcrGkiJbrZo"
+# 2. カスタム検索エンジンで取得したCSE ID
+GOOGLE_CSE_ID = "54d53a5e4d8e94217"
+# RAKUTEN_APP_IDはGoogle Searchへの切り替えに伴い不要になりました
+# RAKUTEN_APP_ID = "1058162671022524425" 
 
 # --- データベース初期化 ---
 def init_db():
-    # フォルダが存在しない場合は作成 (DBファイルとアップロード用)
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    
-    # DB_NAMEをstr()で文字列に変換して接続
     conn = sqlite3.connect(str(DB_NAME)) 
     cur = conn.cursor()
-    
     cur.execute("""
         CREATE TABLE IF NOT EXISTS condiments (
             id INTEGER PRIMARY KEY,
@@ -50,72 +51,75 @@ init_db()
 
 # 静的ファイル設定 (CSS, JS, 画像)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-# アップロードされた画像も外部からアクセスできるように設定
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 templates = Jinja2Templates(directory="templates")
 
 # -----------------------------------------------------------
-# API呼び出し関数 (レシピ検索の確実性を向上させるために修正済み)
+# API呼び出し関数 (Google Custom Search JSON APIを使用するように修正)
 # -----------------------------------------------------------
 async def fetch_recipes_from_api(ingredients_query: str):
-    """期限が近い調味料名 (ingredients_query) を使ってレシピAPIを呼び出す"""
-    # 楽天APIはキーワードをスペースではなく '+' で結合することを推奨
-    search_query = "+".join(ingredients_query.split())
-    RAKUTEN_RECIPE_URL = "https://app.rakuten.co.jp/services/api/Recipe/RecipeSearch/20170426"
+    """
+    調味料名を使ってGoogle Custom Search APIを呼び出し、レシピを検索する。
+    """
+    
+    if GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY" or GOOGLE_CSE_ID == "YOUR_CSE_ID":
+        print("🚨 エラー: GOOGLE_API_KEYまたはGOOGLE_CSE_IDが設定されていません。")
+        return []
+
+    GOOGLE_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
+    search_query = f"{ingredients_query} レシピ"
+    print(f"DEBUG: Google Search クエリ: {search_query}")
 
     async with httpx.AsyncClient() as client:
         try:
-            print(f"DEBUG: 検索クエリ: {search_query}")
-
             response = await client.get(
-                RAKUTEN_RECIPE_URL,
+                GOOGLE_SEARCH_URL,
                 params={
-                    "applicationId": RAKUTEN_APP_ID,
-                    "material": search_query, # 材料名での検索を使用
-                    "format": "json"
+                    "key": GOOGLE_API_KEY,      # 💡 APIキー
+                    "cx": GOOGLE_CSE_ID,       # 💡 CSE ID
+                    "q": search_query,          # 検索クエリ
+                    "num": 5                    # 取得する結果の数 (最大10)
                 },
                 timeout=10.0
             )
             
-            print(f"DEBUG: Rakuten API Response Status: {response.status_code}")
+            print(f"DEBUG: Google API Response Status: {response.status_code}")
             response.raise_for_status() 
             
             data = response.json()
+            recipe_list = data.get('items', [])
             
             recipes = []
-            recipe_list = data.get('recipes', [])
-
             for item in recipe_list:
-                recipe = item.get('recipe', {})
-                
-                if recipe and recipe.get('recipeTitle'):
-                    recipes.append({
-                        "title": recipe.get('recipeTitle', 'タイトルなし'),
-                        "url": recipe.get('recipeUrl', '#'),
-                        "image": recipe.get('mediumImageUrl', recipe.get('largeImageUrl', ''))
-                    })
+                # 検索結果からタイトルとURLを抽出
+                recipes.append({
+                    "title": item.get('title', 'タイトルなし'),
+                    "url": item.get('link', '#'),
+                    # 画像は取得が複雑なため、ここでは省略
+                    "image": "" 
+                })
             
             print(f"DEBUG: 抽出されたレシピ数: {len(recipes)}")
             return recipes
             
         except httpx.HTTPStatusError as e:
             error_text = f"HTTPエラーが発生しました: {e}. ステータスコード: {e.response.status_code}. レスポンス: {e.response.text[:100]}"
-            print(f"🚨 楽天API呼び出し中にHTTPエラーが発生しました: {error_text}")
+            print(f"🚨 Google API呼び出し中にHTTPエラーが発生しました: {error_text}")
             return []
         except Exception as e:
             print(f"🚨 レシピAPI呼び出し中に予期せぬエラーが発生しました: {e}")
             return []
 
 # -----------------------------------------------------------
-# GET: 登録画面
+# GET: 登録画面 (変更なし)
 # -----------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # -----------------------------------------------------------
-# POST: 調味料の登録処理
+# POST: 調味料の登録処理 (変更なし)
 # -----------------------------------------------------------
 @app.post("/upload") 
 async def register_condiment(
@@ -132,7 +136,6 @@ async def register_condiment(
         
         try:
             with file_path.open("wb") as buffer:
-                # ファイルストリームをコピー
                 shutil.copyfileobj(image.file, buffer)
             
             image_path = f"/uploads/{unique_filename}"
@@ -155,7 +158,7 @@ async def register_condiment(
     return RedirectResponse(url="/list", status_code=303)
 
 # -----------------------------------------------------------
-# GET: HTML用 一覧表示
+# GET: HTML用 一覧表示 (変更なし)
 # -----------------------------------------------------------
 @app.get("/list", response_class=HTMLResponse)
 async def list_condiments(request: Request):
@@ -180,7 +183,7 @@ async def list_condiments(request: Request):
             "near_expiry": False
         }
         
-        if row[2]: # 期限日がある場合のみチェック
+        if row[2]:
             try:
                 expiry_date = datetime.strptime(row[2], "%Y-%m-%d").date()
                 
@@ -196,7 +199,7 @@ async def list_condiments(request: Request):
     return templates.TemplateResponse("list.html", {"request": request, "condiments": condiments})
 
 # -----------------------------------------------------------
-# GET: API用 一覧表示 (JSON形式) 💡 新規追加
+# GET: API用 一覧表示 (JSON形式) (変更なし)
 # -----------------------------------------------------------
 @app.get("/api/list", response_class=JSONResponse)
 async def api_list_condiments():
@@ -238,7 +241,7 @@ async def api_list_condiments():
 
 
 # -----------------------------------------------------------
-# POST: 削除処理
+# POST: 削除処理 (変更なし)
 # -----------------------------------------------------------
 @app.post("/delete/{item_id}")
 async def delete_condiment(item_id: int):
@@ -266,7 +269,7 @@ async def delete_condiment(item_id: int):
 
 
 # -----------------------------------------------------------
-# GET: HTML用 期限間近の調味料を使ったレシピ検索ページ (ロジック修正済み)
+# GET: HTML用 期限間近の調味料を使ったレシピ検索ページ (変更なし、fetch_recipes_from_apiが内部でGoogle Searchを使う)
 # -----------------------------------------------------------
 @app.get("/recipes", response_class=HTMLResponse)
 async def get_near_expiry_recipes(request: Request):
@@ -285,19 +288,33 @@ async def get_near_expiry_recipes(request: Request):
     near_expiry_items = [row[0] for row in cur.fetchall()]
     conn.close()
 
+    # 💡 ノイズ除去リスト
+    IGNORE_KEYWORDS = ["無添加", "特選", "大容量", "減塩", "プレミアム", "限定", "だし", "つゆ", "ソース", "ドレッシング", "たれ", "タレ"]
+    
+    # 調味料リストからノイズを除去し、主要なキーワードのみを抽出
+    cleaned_items = []
+    for item_name in near_expiry_items:
+        clean_name = item_name
+        for noise in IGNORE_KEYWORDS:
+            clean_name = clean_name.replace(noise, "").strip()
+        
+        if clean_name:
+            clean_name = " ".join(clean_name.split()) 
+            cleaned_items.append(clean_name)
+
     # 検索クエリの決定
-    query_display = " ".join(near_expiry_items)
+    query_display = " ".join(near_expiry_items) # 画面には元の名前をすべて表示
     query_api = ""
     
-    if not near_expiry_items:
+    if not cleaned_items:
         return templates.TemplateResponse("recipe_search.html", {
             "request": request,
             "recipes": [],
-            "query": f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。"
+            "query": f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。または、検索可能な主要調味料名が抽出できませんでした。"
         })
     else:
-        # 💡 修正: 複数の調味料がある場合、ランダムに一つ選んで検索クエリとする
-        query_api = random.choice(near_expiry_items) 
+        # クリーニングされたリストからランダムに一つ選んで検索クエリとする
+        query_api = random.choice(cleaned_items) 
     
     # APIを呼び出す
     recipes = await fetch_recipes_from_api(query_api)
@@ -310,7 +327,7 @@ async def get_near_expiry_recipes(request: Request):
     })
 
 # -----------------------------------------------------------
-# GET: API用 期限間近レシピ検索 (JSON形式) 💡 新規追加
+# GET: API用 期限間近レシピ検索 (JSON形式) (変更なし、fetch_recipes_from_apiが内部でGoogle Searchを使う)
 # -----------------------------------------------------------
 @app.get("/api/recipes", response_class=JSONResponse)
 async def api_get_near_expiry_recipes():
@@ -328,15 +345,30 @@ async def api_get_near_expiry_recipes():
     near_expiry_items = [row[0] for row in cur.fetchall()]
     conn.close()
 
-    if not near_expiry_items:
+    # 💡 ノイズ除去リスト
+    IGNORE_KEYWORDS = ["無添加", "特選", "大容量", "減塩", "プレミアム", "限定", "だし", "つゆ", "ソース", "ドレッシング", "たれ", "タレ"]
+    
+    # 調味料リストからノイズを除去し、主要なキーワードのみを抽出
+    cleaned_items = []
+    for item_name in near_expiry_items:
+        clean_name = item_name
+        for noise in IGNORE_KEYWORDS:
+            clean_name = clean_name.replace(noise, "").strip()
+        
+        if clean_name:
+            clean_name = " ".join(clean_name.split()) 
+            cleaned_items.append(clean_name)
+    
+    query_display = " ".join(near_expiry_items)
+
+    if not cleaned_items:
         return JSONResponse(content={
             "query": f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。",
             "recipes": []
         })
 
-    # API検索に使うクエリは、ランダムに一つ選んだものにする
-    query_display = " ".join(near_expiry_items)
-    query_api = random.choice(near_expiry_items)
+    # クリーニングされたリストからランダムに一つ選んで検索クエリとする
+    query_api = random.choice(cleaned_items)
     
     recipes = await fetch_recipes_from_api(query_api)
 
