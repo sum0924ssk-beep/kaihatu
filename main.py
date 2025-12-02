@@ -76,7 +76,7 @@ async def fetch_recipes_from_api(ingredients_query: str):
                     "key": GOOGLE_API_KEY,      # 💡 APIキー
                     "cx": GOOGLE_CSE_ID,       # 💡 CSE ID
                     "q": search_query,          # 検索クエリ
-                    "num": 5                    # 取得する結果の数 (最大10)
+                    "num": 3                    # 取得する結果の数 (最大10)
                 },
                 timeout=10.0
             )
