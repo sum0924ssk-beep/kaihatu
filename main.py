@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from pathlib import Path
 from datetime import datetime
-import random 
+# import random # 複数のレシピを検索するため、ランダム選択は不要になる
 
 # --- 設定 ---
 # 💡 ローカル実行用にデータ保存先をプロジェクトフォルダ内の 'app_data' に設定
@@ -28,6 +28,9 @@ GOOGLE_CSE_ID = "54d53a5e4d8e94217"
 # --- データベース初期化 ---
 def init_db():
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+    # templatesディレクトリがない場合は作成（Jinja2Templatesの参照先に必要）
+    os.makedirs("templates", exist_ok=True) 
+    
     conn = sqlite3.connect(str(DB_NAME)) 
     cur = conn.cursor()
     cur.execute("""
@@ -47,26 +50,28 @@ app = FastAPI()
 init_db()
 
 # 静的ファイル設定 (CSS, JS, 画像)
+# テンプレートファイルは 'templates' ディレクトリにある前提で修正
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="templates") # テンプレートディレクトリは "templates"
 
 # -----------------------------------------------------------
-# API呼び出し関数 (Google Custom Search JSON APIを使用するように修正)
+# API呼び出し関数 (Google Custom Search JSON APIを使用)
 # -----------------------------------------------------------
 async def fetch_recipes_from_api(ingredients_query: str):
     """
     調味料名を使ってGoogle Custom Search APIを呼び出し、レシピを検索する。
     """
     
-    if GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY" or GOOGLE_CSE_ID == "YOUR_CSE_ID":
-        print("🚨 エラー: GOOGLE_API_KEYまたはGOOGLE_CSE_IDが設定されていません。")
-        return []
+    # 実際にはAPIキーの検証ロジックをここに記述
+    # if GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY" or GOOGLE_CSE_ID == "YOUR_CSE_ID":
+    #     print("🚨 エラー: APIキーが設定されていません。")
+    #     return []
 
     GOOGLE_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
     search_query = f"{ingredients_query} レシピ"
-    print(f"DEBUG: Google Search クエリ: {search_query}")
+    # print(f"DEBUG: Google Search クエリ: {search_query}")
 
     async with httpx.AsyncClient() as client:
         try:
@@ -74,14 +79,14 @@ async def fetch_recipes_from_api(ingredients_query: str):
                 GOOGLE_SEARCH_URL,
                 params={
                     "key": GOOGLE_API_KEY,      
-                    "cx": GOOGLE_CSE_ID,       
-                    "q": search_query,         
-                    "num": 5                   
+                    "cx": GOOGLE_CSE_ID,      
+                    "q": search_query,        
+                    "num": 5                  
                 },
                 timeout=10.0
             )
             
-            print(f"DEBUG: Google API Response Status: {response.status_code}")
+            # print(f"DEBUG: Google API Response Status: {response.status_code}")
             response.raise_for_status() 
             
             data = response.json()
@@ -94,14 +99,14 @@ async def fetch_recipes_from_api(ingredients_query: str):
                     "title": item.get('title', 'タイトルなし'),
                     "url": item.get('link', '#'),
                     # 画像は取得が複雑なため、ここでは省略
-                    "image": "recipe.png" 
+                    "image": "/static/recipe.png" # 存在する静的ファイルを参照するように修正
                 })
             
-            print(f"DEBUG: 抽出されたレシピ数: {len(recipes)}")
+            # print(f"DEBUG: 抽出されたレシピ数: {len(recipes)}")
             return recipes
             
         except httpx.HTTPStatusError as e:
-            error_text = f"HTTPエラーが発生しました: {e}. ステータスコード: {e.response.status_code}. レスポンス: {e.response.text[:100]}"
+            error_text = f"HTTPエラーが発生しました: {e.response.status_code}. レスポンス: {e.response.text[:100]}"
             print(f"🚨 Google API呼び出し中にHTTPエラーが発生しました: {error_text}")
             return []
         except Exception as e:
@@ -109,14 +114,14 @@ async def fetch_recipes_from_api(ingredients_query: str):
             return []
 
 # -----------------------------------------------------------
-# GET: 登録画面 (変更なし)
+# GET: 登録画面 (/templates/index.html を参照)
 # -----------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # -----------------------------------------------------------
-# POST: 調味料の登録処理 (変更なし)
+# POST: 調味料の登録処理
 # -----------------------------------------------------------
 @app.post("/upload") 
 async def register_condiment(
@@ -128,11 +133,13 @@ async def register_condiment(
     
     if image and image.filename:
         extension = Path(image.filename).suffix
-        unique_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{random.randint(1000, 9999)}{extension}"
+        unique_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(2).hex()}{extension}"
         file_path = UPLOAD_DIR / unique_filename
         
         try:
             with file_path.open("wb") as buffer:
+                # ファイルポインタを先頭に戻す必要があるため、seek(0)を追加
+                image.file.seek(0)
                 shutil.copyfileobj(image.file, buffer)
             
             image_path = f"/uploads/{unique_filename}"
@@ -155,14 +162,14 @@ async def register_condiment(
     return RedirectResponse(url="/list", status_code=303)
 
 # -----------------------------------------------------------
-# GET: HTML用 一覧表示 (変更なし)
+# GET: HTML用 一覧表示 (/templates/list.html を参照)
 # -----------------------------------------------------------
 @app.get("/list", response_class=HTMLResponse)
 async def list_condiments(request: Request):
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
-    
-    cur.execute("SELECT id, name, expiry, image_path FROM condiments ORDER BY created_at DESC")
+    # 💡 修正: created_at (登録日) も取得するように変更
+    cur.execute("SELECT id, name, expiry, image_path, created_at FROM condiments ORDER BY created_at DESC") 
     db_condiments = cur.fetchall()
     conn.close()
     
@@ -171,14 +178,19 @@ async def list_condiments(request: Request):
     expiry_limit = today + timedelta(days=EXPIRY_THRESHOLD_DAYS)
     
     for row in db_condiments:
+        # DBからの結果を辞書として扱う
         item = {
             "id": row[0],
             "name": row[1],
             "expiry": row[2],
             "image_path": row[3],
+            "created_at": row[4], # DBから取得した日時
             "is_expired": False,
             "near_expiry": False
         }
+        
+        # list.htmlのデータ属性用に、登録日をISO形式で追加
+        item["registered_date"] = item["created_at"].split(' ')[0] 
         
         if row[2]:
             try:
@@ -196,49 +208,7 @@ async def list_condiments(request: Request):
     return templates.TemplateResponse("list.html", {"request": request, "condiments": condiments})
 
 # -----------------------------------------------------------
-# GET: API用 一覧表示 (JSON形式) (変更なし)
-# -----------------------------------------------------------
-@app.get("/api/list", response_class=JSONResponse)
-async def api_list_condiments():
-    conn = sqlite3.connect(str(DB_NAME))
-    cur = conn.cursor()
-    
-    cur.execute("SELECT id, name, expiry, image_path FROM condiments ORDER BY created_at DESC")
-    db_condiments = cur.fetchall()
-    conn.close()
-    
-    condiments = []
-    today = date.today()
-    expiry_limit = today + timedelta(days=EXPIRY_THRESHOLD_DAYS)
-    
-    for row in db_condiments:
-        item = {
-            "id": row[0],
-            "name": row[1],
-            "expiry": row[2],
-            "image_path": row[3],
-            "is_expired": False,
-            "near_expiry": False
-        }
-        
-        if row[2]:
-            try:
-                expiry_date = datetime.strptime(row[2], "%Y-%m-%d").date()
-                
-                if expiry_date < today:
-                    item["is_expired"] = True
-                elif expiry_date <= expiry_limit:
-                    item["near_expiry"] = True
-            except ValueError:
-                pass
-
-        condiments.append(item)
-    
-    return JSONResponse(content=condiments)
-
-
-# -----------------------------------------------------------
-# POST: 削除処理 (変更なし)
+# POST: 削除処理
 # -----------------------------------------------------------
 @app.post("/delete/{item_id}")
 async def delete_condiment(item_id: int):
@@ -266,21 +236,23 @@ async def delete_condiment(item_id: int):
 
 
 # -----------------------------------------------------------
-# GET: HTML用 期限間近の調味料を使ったレシピ検索ページ (変更なし、fetch_recipes_from_apiが内部でGoogle Searchを使う)
+# GET: HTML用 期限間近の調味料を使ったレシピ検索ページ (修正)
 # -----------------------------------------------------------
 @app.get("/recipes", response_class=HTMLResponse)
 async def get_near_expiry_recipes(request: Request):
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
     
+    today = date.today().strftime("%Y-%m-%d")
     expiry_limit = (date.today() + timedelta(days=EXPIRY_THRESHOLD_DAYS)).strftime("%Y-%m-%d")
     
+    # 期限切れではない、かつ期限が近いアイテムを取得
     cur.execute("""
         SELECT name FROM condiments 
         WHERE expiry IS NOT NULL AND expiry != ''
-        AND expiry <= ? 
+        AND expiry >= ? AND expiry <= ? 
         ORDER BY expiry ASC
-    """, (expiry_limit,))
+    """, (today, expiry_limit))
     
     near_expiry_items = [row[0] for row in cur.fetchall()]
     conn.close()
@@ -298,46 +270,58 @@ async def get_near_expiry_recipes(request: Request):
         if clean_name:
             clean_name = " ".join(clean_name.split()) 
             cleaned_items.append(clean_name)
-
-    # 検索クエリの決定
-    query_display = " ".join(near_expiry_items) # 画面には元の名前をすべて表示
-    query_api = ""
     
-    if not cleaned_items:
+    # 表示用のクエリ（カンマ区切りで表示）
+    query_display = ", ".join(near_expiry_items)
+    
+    # --- 修正: 複数の調味料で個別に検索し、結果を統合する ---
+    all_recipes = []
+    
+    if cleaned_items:
+        for ingredient_query in set(cleaned_items): # 重複検索を避けるためsetを使用
+            # 外部APIでレシピを検索 (非同期呼び出し)
+            current_recipes = await fetch_recipes_from_api(ingredient_query) 
+            
+            # レシピにどの調味料で検索したか('used_ingredient')の情報も追加
+            for recipe in current_recipes:
+                # 検索クエリ（クリーニングされた名前）を付加
+                recipe['used_ingredient'] = ingredient_query
+                all_recipes.append(recipe)
+    # -----------------------------------------------------------
+
+    if not all_recipes:
+        message = f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。または、レシピが見つかりませんでした。"
         return templates.TemplateResponse("recipe_search.html", {
             "request": request,
             "recipes": [],
-            "query": f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。または、検索可能な主要調味料名が抽出できませんでした。"
+            "query_ingredients": message # テンプレートで参照するように修正
         })
-    else:
-        # クリーニングされたリストからランダムに一つ選んで検索クエリとする
-        query_api = random.choice(cleaned_items) 
-    
-    # APIを呼び出す
-    recipes = await fetch_recipes_from_api(query_api)
-    
+
+    # テンプレートに渡す
     return templates.TemplateResponse("recipe_search.html", {
         "request": request,
-        "recipes": recipes,
-        "query": query_display, # 画面には結合された名前を表示
+        "recipes": all_recipes, # 統合されたレシピリスト
+        "query_ingredients": query_display, # 画面には元の名前をすべて表示
         "expiry_days": EXPIRY_THRESHOLD_DAYS
     })
 
 # -----------------------------------------------------------
-# GET: API用 期限間近レシピ検索 (JSON形式) (変更なし、fetch_recipes_from_apiが内部でGoogle Searchを使う)
+# GET: API用 期限間近レシピ検索 (JSON形式) (修正)
 # -----------------------------------------------------------
 @app.get("/api/recipes", response_class=JSONResponse)
 async def api_get_near_expiry_recipes():
+    # ... (DB接続とnear_expiry_itemsの取得は /recipes と同様) ...
     conn = sqlite3.connect(str(DB_NAME))
     cur = conn.cursor()
+    today = date.today().strftime("%Y-%m-%d")
     expiry_limit = (date.today() + timedelta(days=EXPIRY_THRESHOLD_DAYS)).strftime("%Y-%m-%d")
     
     cur.execute("""
         SELECT name FROM condiments 
         WHERE expiry IS NOT NULL AND expiry != ''
-        AND expiry <= ? 
+        AND expiry >= ? AND expiry <= ? 
         ORDER BY expiry ASC
-    """, (expiry_limit,))
+    """, (today, expiry_limit))
     
     near_expiry_items = [row[0] for row in cur.fetchall()]
     conn.close()
@@ -356,20 +340,27 @@ async def api_get_near_expiry_recipes():
             clean_name = " ".join(clean_name.split()) 
             cleaned_items.append(clean_name)
     
-    query_display = " ".join(near_expiry_items)
+    query_display = ", ".join(near_expiry_items)
 
-    if not cleaned_items:
+    # --- 修正: 複数の調味料で個別に検索し、結果を統合する ---
+    all_recipes = []
+    
+    if cleaned_items:
+        for ingredient_query in set(cleaned_items):
+            current_recipes = await fetch_recipes_from_api(ingredient_query) 
+            
+            for recipe in current_recipes:
+                recipe['used_ingredient'] = ingredient_query
+                all_recipes.append(recipe)
+    # -----------------------------------------------------------
+
+    if not all_recipes:
         return JSONResponse(content={
             "query": f"期限が{EXPIRY_THRESHOLD_DAYS}日以内に切れる調味料はありません。",
             "recipes": []
         })
 
-    # クリーニングされたリストからランダムに一つ選んで検索クエリとする
-    query_api = random.choice(cleaned_items)
-    
-    recipes = await fetch_recipes_from_api(query_api)
-
     return JSONResponse(content={
         "query": query_display,
-        "recipes": recipes
+        "recipes": all_recipes # 統合されたレシピリストを返す
     })
