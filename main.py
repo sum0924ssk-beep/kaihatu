@@ -94,8 +94,6 @@ async def fetch_recipes_from_api(ingredients_query: str):
                 recipes.append({
                     "title": item.get('title', 'タイトルなし'),
                     "url": item.get('link', '#'),
-                    # 画像は取得が複雑なため、ここでは省略
-                    "image": "/static/recipe.png"
                 })
             
             print(f"DEBUG: 抽出されたレシピ数: {len(recipes)}")
