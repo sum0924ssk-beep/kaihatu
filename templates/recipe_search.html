@@ -7,19 +7,19 @@
     <h2 class="form-title">期限が近い調味料活用レシピ</h2>
 
     {% if recipes %}
-        <p>以下の調味料を活用できるレシピを提案します: <strong>{{ query_ingredients }}</strong></p>
+        <p>以下の調味料を活用できるレシピを提案します: <strong>{{ query }}</strong></p>
         
         <div class="list-grid">
             {% for recipe in recipes %}
             <div class="item-card recipe-card">
-                <img src="{{ recipe.image }}"
+                <img src="{{ recipe.image }}" 
                      alt="{{ recipe.title }}" 
-                     onerror="this.onerror=null;this.src='{{ url_for('static', path='images/no_recipe_image.png') }}';">
+                     onerror="this.onerror=null;this.src='{{ url_for('static', path='no_recipe_image.png') }}';">
                      
                 <div class="item-info">
                     <p>{{ recipe.title }}</p>
                     {% if recipe.used_ingredient %}
-                    <p class="recipe-source">活用調味料: **{{ recipe.used_ingredient }}**</p>
+                    <p class="recipe-source">活用調味料: <strong>{{ recipe.used_ingredient }}</strong></p>
                     {% endif %}
                     <a href="{{ recipe.url }}" target="_blank">レシピを見る</a>
                 </div>
@@ -27,7 +27,8 @@
             {% endfor %}
         </div>
     {% else %}
-        <p>{{ query_ingredients }}</p>
+        <p>{{ query }}</p>
+        <p>（別の調味料を登録するか、期限を設定してください）</p>
     {% endif %}
 
     <p style="margin-top: 20px;">
