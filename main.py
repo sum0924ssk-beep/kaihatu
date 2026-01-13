@@ -313,7 +313,7 @@ async def get_near_expiry_recipes(request: Request):
         })
     else:
         # クリーニングされたリストからランダムに一つ選んで検索クエリとする
-        query_api = random.choice(cleaned_items) 
+          query_api = " ".join(cleaned_items)
     
     # APIを呼び出す
     recipes = await fetch_recipes_from_api(query_api)
@@ -367,7 +367,7 @@ async def api_get_near_expiry_recipes():
         })
 
     # クリーニングされたリストからランダムに一つ選んで検索クエリとする
-    query_api = random.choice(cleaned_items)
+    query_api = " ".join(cleaned_items)
     
     recipes = await fetch_recipes_from_api(query_api)
 
