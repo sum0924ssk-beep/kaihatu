@@ -10,10 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from pathlib import Path
 from datetime import datetime
 import random 
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from starlette.middleware.sessions import SessionMiddleware
-from passlib.context import CryptContext
+
 
 # --- 設定 ---
 # 💡 ローカル実行用にデータ保存先をプロジェクトフォルダ内の 'app_data' に設定
