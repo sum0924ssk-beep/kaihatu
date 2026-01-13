@@ -12,7 +12,8 @@
         <div class="list-grid">
             {% for recipe in recipes %}
             <div class="item-card recipe-card">
-                <img src="../static/recipe.png">
+               <img src="{{ url_for('static', filename='recipe.png') }}" alt="レシピ画像">
+
                      
                      
                 <div class="item-info">
