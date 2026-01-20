@@ -392,8 +392,10 @@ form button[type="submit"]:hover {
 .item-info a:hover {
     background-color: #2980b9;
 }
-
 .expiry-label {
-    color: white;
+  color: white;
   text-align: left;
+  font-size: 14px;
+  margin-bottom: 4px;
+  display: block;
 }
